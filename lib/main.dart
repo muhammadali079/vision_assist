@@ -1,45 +1,15 @@
 import 'package:firebase_core/firebase_core.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:testing/ocr_screen.dart';
-import 'package:testing/screens/camera_screen.dart';
-import 'package:testing/services/camera_services.dart';
-import 'package:testing/services/ocr_services.dart';
-import 'package:testing/services/tts_services.dart';
-import 'package:testing/state_management/bloc/camera_bloc.dart';
-import 'package:testing/state_management/bloc/ocr_bloc.dart';
-import 'package:testing/state_management/bloc/tts_bloc.dart';
-import 'signup_screen.dart';
-import 'signin_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:testing/new/camera_screen.dart';
+import 'package:testing/new/signup_screen.dart';
 
 void main() async {
- WidgetsFlutterBinding.ensureInitialized();
+  WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
-  final cameraService = CameraService();
-  await cameraService.initializeCamera();
-  final ocrService = OCRService();
-  final ttsService = TTSService();
 
-
-   runApp(
-    MultiBlocProvider(
-      providers: [
-        BlocProvider(
-          create: (context) => OCRBloc(ocrService: ocrService),
-        ),
-        BlocProvider(
-          create: (context) => CaptureBloc(
-            cameraService: cameraService,
-            ocrBloc: context.read<OCRBloc>(), // Pass OCRBloc to CaptureBloc
-          ),
-        ),
-         BlocProvider(
-          create: (context) => TTSBloc(ttsService: ttsService),
-        ),
-      ],
-      child: const MyApp(),
-    ),
+  runApp(
+    const MyApp(),
   );
 }
 
@@ -94,17 +64,11 @@ class AuthWrapper extends StatefulWidget {
   @override
   State<AuthWrapper> createState() => _AuthWrapperState();
 }
-void forceLogout() async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setBool('isLoggedIn', false);
-  print("Forced Logout: isLoggedIn set to false");
-}
-
 
 class _AuthWrapperState extends State<AuthWrapper> {
-  bool isLoggedIn = false; 
+  bool isLoggedIn = false;
   bool isSignIn = false;
-  
+
   @override
   void initState() {
     super.initState();
@@ -114,21 +78,16 @@ class _AuthWrapperState extends State<AuthWrapper> {
   Future<void> _checkLoginStatus() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-     //isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
-       isLoggedIn = false;
+      //isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
+      isLoggedIn = false;
     });
   }
 
-  void toggleView() => setState(() => isSignIn = !isSignIn);
-
   @override
   Widget build(BuildContext context) {
-    
-//  return isLoggedIn 
-//     ? const CameraScreen() 
-//     : isSignIn 
-//       ? SigninScreen(toggleView: toggleView) 
-//       : SignupScreen(toggleView: toggleView); 
-   return  const CameraScreen() ;
+//  return isLoggedIn
+//     ? const CameraScreen()
+//       : SignInScreen();
+    return const SignUpScreen();
   }
 }
