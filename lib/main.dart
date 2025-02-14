@@ -2,6 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:testing/new/camera_screen.dart';
+import 'package:testing/new/signin_screen.dart';
 import 'package:testing/new/signup_screen.dart';
 
 void main() async {
@@ -88,6 +89,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
 //  return isLoggedIn
 //     ? const CameraScreen()
 //       : SignInScreen();
-    return const SignUpScreen();
+    return  CameraScreen();
   }
 }

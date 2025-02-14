@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/services.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:testing/camera_screen.dart';
+import 'package:testing/new/camera_screen.dart';
 import 'package:testing/new/signup_screen.dart';
 
 class SignInScreen extends StatefulWidget {
@@ -18,10 +20,10 @@ class _SignInScreenState extends State<SignInScreen>
   final stt.SpeechToText _speech = stt.SpeechToText();
   FlutterTts flutterTts = FlutterTts();
 
-  bool switchingscreen = false;
   bool _isListening = false;
-  bool _isProcessing = false;
+  bool isSpeechActive = false;
   int _currentFieldIndex = 0;
+  String updatedWords = "";
 
   final List<Map<String, String>> _formFields = [
     {'label': 'Email Address', 'value': ''},
@@ -47,22 +49,11 @@ class _SignInScreenState extends State<SignInScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _speech.stop();
+    _stopListening();
     for (var controller in _controllers) {
       controller.dispose();
     }
     super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.detached) {
-      _speech.stop();
-      _isListening = false;
-    } else if (state == AppLifecycleState.resumed) {
-      _promptUser();
-    }
   }
 
   void _initializeSpeech() async {
@@ -73,108 +64,138 @@ class _SignInScreenState extends State<SignInScreen>
   }
 
   void _promptUser() {
-    if (_currentFieldIndex < _formFields.length && !_isListening) {
-      Future.delayed(const Duration(microseconds: 200), () {
+    if (_currentFieldIndex < _formFields.length &&
+        !_isListening &&
+        !isSpeechActive) {
+      Future.delayed(const Duration(milliseconds: 200), () {
         _startListening(_formFields[_currentFieldIndex]['label']!);
       });
     }
   }
 
   void _startListening(String fieldLabel) async {
-    if (_isListening || _isProcessing) return;
+    if (_isListening) return;
 
-    setState(() => _isListening = true);
-
-    await flutterTts.awaitSpeakCompletion(true);
-    await flutterTts.speak("Please say your $fieldLabel.");
-    await flutterTts.awaitSpeakCompletion(true);
-
-    bool speechDetected = false;
-
-    Future.delayed(const Duration(seconds: 10), () {
-      if (!speechDetected && _isListening) {
-        flutterTts.speak("I didn't hear anything. Please try again.");
-        _stopListening();
-        Future.delayed(
-            const Duration(seconds: 5), () => _startListening(fieldLabel));
-      }
+    setState(() {
+      _isListening = true;
+      updatedWords = "";
     });
+    isSpeechActive = true;
 
-    _speech.listen(onResult: (result) async {
-      if (result.recognizedWords.isNotEmpty) {
-        speechDetected = true;
-        String updatedWords = result.recognizedWords.toLowerCase().trim();
+    _readMessage("Please say your $fieldLabel.");
+    await flutterTts.awaitSpeakCompletion(true);
 
-        // Map<String, String> replacements = {
-        //   " at the great ": "@",
-        //   " the great ": "@",
-        //   "at the great ": "@",
-        //   " at the great": "@",
-        //   "singing": "sign in",
-        // };
-        Map<RegExp, String> replacements = {
-          RegExp(r"\b(at )?the great\b", caseSensitive: false): "@",
-          RegExp(r"\bsinging\b", caseSensitive: false): "sign in",
-        };
-        // replacements.forEach((oldWord, newWord) {
-        //   updatedWords = updatedWords.replaceAll(oldWord, newWord);
-        // });
-        replacements.forEach((oldWord, newWord) {
-          updatedWords =
-              updatedWords.replaceAllMapped(oldWord, (match) => newWord);
-        });
-        updatedWords = updatedWords.replaceAll(RegExp(r'\s*@\s*'), '@');
-        updatedWords = updatedWords.replaceAll(
-            RegExp(r'\bGmail\b', caseSensitive: true), 'gmail');
-        updatedWords = updatedWords.replaceAll(RegExp(r'\s+'), ' ').trim();
-        print("Updated Words: $updatedWords");
+    bool hasSpoken = false; 
+    Timer? pauseTimer; 
 
-        if (updatedWords.contains("sign up") ||
-            updatedWords.contains("switch") ||
-            updatedWords.contains("toggle")) {
-          switchingscreen = true;
-          _stopListening();
-          await flutterTts.speak("Switching to sign in screen");
-          await flutterTts.awaitSpeakCompletion(true);
+    _speech.listen(
+      onResult: (result) {
+        if (result.recognizedWords.isNotEmpty) {
+          hasSpoken = true; 
+          updatedWords = result.recognizedWords.toLowerCase().trim();
+          updatedWords = updatedWords.replaceAll(RegExp(r'\s*@\s*'), '@');
+          updatedWords = updatedWords.replaceAll(
+              RegExp(r'\bGmail\b', caseSensitive: true), 'gmail');
+          updatedWords = updatedWords.replaceAll(RegExp(r'\s+'), ' ').trim();
 
-          if (mounted) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => SignUpScreen(),
-              ),
-            );
+          print("Updated Words: $updatedWords");
+          if (updatedWords.contains("toggle") ||
+              updatedWords.contains("switch") ||
+              updatedWords.contains("sign up")) {
+            print("Navigating to Sign Up screen...");
+            _readMessage("Switching to Sign Up screen...");
+            Future.delayed(const Duration(seconds: 1), () {
+              Navigator.pushReplacement(context,
+                  MaterialPageRoute(builder: (_) => const SignUpScreen()));
+            });
+
+            return;
+          } else if (updatedWords.contains("exit") ||
+              updatedWords.contains("close")) {
+            print("Closing the app...");
+            _readMessage("Closing the app...");
+            Future.delayed(const Duration(seconds: 1), () {
+              SystemNavigator.pop(); 
+            });
+            return;
           }
-        } else {
+
           setState(() {
             _formFields[_currentFieldIndex]['value'] = updatedWords;
             _controllers[_currentFieldIndex].text = updatedWords;
           });
 
-          _stopListening();
-          // await flutterTts.awaitSpeakCompletion(true);
-          // await flutterTts.speak("You said $updatedWords.");
-          // await flutterTts.awaitSpeakCompletion(true);
-
-          if (!switchingscreen &&
-              updatedWords.isNotEmpty &&
-              _currentFieldIndex == _formFields.length - 1 &&
-              (_formFields[_currentFieldIndex]['value']?.isNotEmpty ?? false)) {
-            await flutterTts.speak("All fields are filled.");
-            await flutterTts.awaitSpeakCompletion(true);
-            await _signIn();
-          } else if (!switchingscreen &&
-              updatedWords.isNotEmpty &&
-              (_formFields[_currentFieldIndex]['value']?.isNotEmpty ?? false)) {
-            print(_currentFieldIndex);
-            print(_formFields[_currentFieldIndex]['label']);
-            print(_formFields[_currentFieldIndex]['value']);
-            await Future.delayed(const Duration(seconds: 3));
-            _goToNextField();
-          }
+          pauseTimer?.cancel();
         }
+      },
+      listenFor: const Duration(seconds: 20),
+      pauseFor: const Duration(seconds: 10),
+    );
+
+    pauseTimer = Timer(const Duration(seconds: 10), () {
+      if (_isListening && _formFields[_currentFieldIndex]['value']!.isEmpty) {
+        print("PauseFor timeout reached. Waiting for speech completion...");
       }
     });
+
+    _speech.statusListener = (status) {
+      print("Speech recognition status: $status");
+
+      if (status == "notListening") {
+        _stopListening();
+        isSpeechActive = false;
+        _isListening = false;
+
+        if (updatedWords.isNotEmpty) {
+          _formFields[_currentFieldIndex]['value'] = updatedWords;
+          _controllers[_currentFieldIndex].text = updatedWords;
+        }
+
+        print("Captured Words: ${_formFields[_currentFieldIndex]['value']}");
+
+        Future.delayed(const Duration(seconds: 10), () {
+          if (_formFields[_currentFieldIndex]['value']!.isNotEmpty) {
+            pauseTimer?.cancel(); 
+            if (_currentFieldIndex < _formFields.length - 1) {
+              print("Switching to next field...");
+              Future.delayed(const Duration(milliseconds: 500), _goToNextField);
+            } else {
+              print("All fields filled. Signing in...");
+              _readMessage("All fields are filled. Signing in...");
+              _signIn();
+            }
+          } else {
+            print("No words captured, retrying...");
+            _readMessage("I didn't hear anything. Please say it again.");
+            Future.delayed(const Duration(seconds: 2), () {
+          
+              if (_formFields[_currentFieldIndex]['value']!.isEmpty) {
+                _startListening(_formFields[_currentFieldIndex]['label']!);
+              } else {
+                Future.delayed(
+                    const Duration(milliseconds: 500), _goToNextField);
+              }
+            });
+          }
+        });
+      }
+    };
+  }
+
+  void _goToNextField() async {
+    _stopListening();
+
+    if (_currentFieldIndex < _formFields.length - 1 &&
+        _formFields[_currentFieldIndex]['value']!.isNotEmpty) {
+      setState(() {
+        _currentFieldIndex++;
+        updatedWords = "";
+        _controllers[_currentFieldIndex].clear();
+      });
+
+      await Future.delayed(const Duration(seconds: 1));
+      _promptUser();
+    }
   }
 
   void _stopListening() {
@@ -182,24 +203,9 @@ class _SignInScreenState extends State<SignInScreen>
     setState(() => _isListening = false);
   }
 
-  void _goToNextField() async {
-    _stopListening();
-    print("current index $_currentFieldIndex");
-    setState(() {
-      _isProcessing = true;
-      if (_currentFieldIndex < _formFields.length - 1 &&
-          (_formFields[_currentFieldIndex]['value']?.isNotEmpty ?? false)) {
-        _currentFieldIndex++;
-      }
-    });
-    print("new index $_currentFieldIndex");
-    await Future.delayed(const Duration(seconds: 1));
-    setState(() => _isProcessing = false);
-    _promptUser();
-  }
-
   void _readMessage(String message) async {
     await flutterTts.speak(message);
+    await flutterTts.awaitSpeakCompletion(true);
   }
 
   Future<void> _signIn() async {
@@ -213,11 +219,9 @@ class _SignInScreenState extends State<SignInScreen>
       Navigator.pushReplacement(
           context, MaterialPageRoute(builder: (_) => const CameraScreen()));
     } catch (e) {
-      await flutterTts.speak("Error signing in. Please try again");
+      await flutterTts.speak("Error signing in. Please try again.");
       await flutterTts.awaitSpeakCompletion(true);
-      Future.delayed(const Duration(seconds: 2), () {
-        _resetForm();
-      });
+      Future.delayed(const Duration(seconds: 2), _resetForm);
     }
   }
 
@@ -232,9 +236,7 @@ class _SignInScreenState extends State<SignInScreen>
       _currentFieldIndex = 0;
     });
 
-    Future.delayed(const Duration(seconds: 2), () {
-      _promptUser();
-    });
+    Future.delayed(const Duration(seconds: 2), _promptUser);
   }
 
   @override

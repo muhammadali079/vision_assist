@@ -1,9 +1,16 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
-import 'dart:io';
-import 'camera_screen.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:testing/new/camera_screen.dart';
+import 'dart:convert';
+
+import 'package:testing/new/signin_screen.dart';
 
 class OcrScreen extends StatefulWidget {
   final String imagePath;
@@ -16,67 +23,144 @@ class OcrScreen extends StatefulWidget {
 class _OcrScreenState extends State<OcrScreen> {
   final FlutterTts _flutterTts = FlutterTts();
   final stt.SpeechToText _speech = stt.SpeechToText();
+  final AudioPlayer _audioPlayer = AudioPlayer();
   String _extractedText = "Processing...";
   bool _isListening = false;
+  bool _isOCRScreen = true;
+  final String openAiApiKey =
+      "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"; // Replace with actual API Key
 
   @override
   void initState() {
     super.initState();
     _extractText();
+    _isOCRScreen = true;
   }
 
   Future<void> _extractText() async {
     try {
-      final textRecognizer = TextRecognizer();
+      final textRecognizer =
+          TextRecognizer(script: TextRecognitionScript.latin);
       final inputImage = InputImage.fromFilePath(widget.imagePath);
       final recognizedText = await textRecognizer.processImage(inputImage);
+      textRecognizer.close();
+
       String extracted = recognizedText.text.isNotEmpty
           ? recognizedText.text
           : "No readable text found.";
-
       setState(() => _extractedText = extracted);
       print("Extracted text: $extracted");
-      await _flutterTts.speak(extracted);
-      await _flutterTts.awaitSpeakCompletion(true);
-      Future.delayed(const Duration(seconds: 2), () => _promptUser());
+
+      await _speakWithOpenAI(extracted);
     } catch (e) {
-      await _flutterTts.speak("error while extracting text");
+      await _flutterTts.speak("Error while extracting text.");
+      Future.delayed(const Duration(seconds: 2), _promptTTSUser);
     }
   }
 
-  void _promptUser() {
-    _flutterTts.speak(
-        "Say 'retry' to take another picture or 'exit' to close the app.");
-    _startListening();
+  Future<void> _speakWithOpenAI(String text) async {
+    try {
+      final response = await http.post(
+        Uri.parse("https://api.openai.com/v1/audio/speech"),
+        headers: {
+          "Authorization": "Bearer $openAiApiKey",
+          "Content-Type": "application/json"
+        },
+        body: jsonEncode({"model": "tts-1", "voice": "alloy", "input": text}),
+      );
+
+      if (response.statusCode == 200) {
+        final directory = await getTemporaryDirectory();
+        final filePath = "${directory.path}/speech.mp3";
+        final file = File(filePath);
+        await file.writeAsBytes(response.bodyBytes);
+
+        await _audioPlayer.setSourceUrl(filePath);
+        await _audioPlayer.resume();
+        await _audioPlayer.onPlayerComplete.first;
+        Future.delayed(const Duration(seconds: 2), _promptTTSUser);
+      } else {
+        print("OpenAI TTS Error: ${response.body}");
+      }
+    } catch (e) {
+      print("Error in OpenAI TTS: $e");
+    }
   }
 
-  void _startListening() async {
+  Future<void> _speakWithFlutterTTS(String text) async {
+    await _flutterTts.speak(text);
+    await _flutterTts.awaitSpeakCompletion(true);
+  }
+
+  void _promptTTSUser() {
+    _speakWithFlutterTTS(
+        "Say capture to go back to camera again or exit to close app.");
+    _startListeningForNewCommand();
+  }
+
+  void _startListeningForNewCommand() async {
     if (_isListening) return;
     setState(() => _isListening = true);
 
-    _speech.listen(onResult: (result) {
-      if (result.recognizedWords.isNotEmpty) {
-        String command = result.recognizedWords.toLowerCase().trim();
-        if (command.contains("retry")) {
-          _retry();
-        } else if (command.contains("exit")) {
-          _exitApp();
-        }
-      }
-    });
+    bool available = await _speech.initialize();
+    if (available) {
+      _speech.listen(
+        onResult: (result) {
+          if (result.recognizedWords.isNotEmpty) {
+            String command = result.recognizedWords.toLowerCase().trim();
+            print("User said: $command");
 
-    Future.delayed(const Duration(seconds: 10), () {
-      if (_isListening) {
-        _flutterTts.speak("Say 'retry' or 'exit'.");
-        _speech.stop();
-        Future.delayed(const Duration(seconds: 5), () => _startListening());
-      }
+            if (command.contains("retry") || command.contains("capture")) {
+              _retry();
+              return;
+            } else if (command.contains("exit") || command.contains("close")) {
+              _exitApp();
+              return;
+            } else if (command.contains("log out") || command.contains("logout") || command.contains("signout") ||
+                command.contains("sign out")) {
+              _logOut();
+              return;
+            }
+          }
+        },
+      );
+      _speech.statusListener = (status) {
+        print("Speech recognition status: $status");
+
+        if (status == "notListening" && _isOCRScreen) {
+          print("Paused. Restarting listening...");
+          _stopListening();
+
+          if (!_isListening) {
+            print("Restarting...");
+            _startListeningForNewCommand();
+          }
+        }
+      };
+    }
+  }
+
+  void _logOut() {
+    _isOCRScreen = false;
+    _speech.stop();
+    _speakWithFlutterTTS("Logging Out...");
+    Future.delayed(const Duration(seconds: 2), () {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const SignInScreen()),
+      );
     });
   }
 
-  void _retry() {
+  void _stopListening() {
     _speech.stop();
-    _flutterTts.speak("Returning to camera...");
+    setState(() => _isListening = false);
+  }
+
+  void _retry() {
+    _isOCRScreen = false;
+    _speech.stop();
+    _speakWithFlutterTTS("Returning to camera...");
     Future.delayed(const Duration(seconds: 2), () {
       Navigator.pushReplacement(
         context,
@@ -86,14 +170,19 @@ class _OcrScreenState extends State<OcrScreen> {
   }
 
   void _exitApp() {
+    _isOCRScreen = false;
     _speech.stop();
-    _flutterTts.speak("Closing app...");
-    Future.delayed(const Duration(seconds: 2), () => Navigator.pop(context));
+    _speakWithFlutterTTS("Closing app...");
+    Future.delayed(const Duration(seconds: 2), () {
+      SystemNavigator.pop();
+    });
   }
 
   @override
   void dispose() {
     _speech.stop();
+    _audioPlayer.dispose();
+    _isOCRScreen = false;
     super.dispose();
   }
 
@@ -104,17 +193,21 @@ class _OcrScreenState extends State<OcrScreen> {
       body: Column(
         children: [
           Expanded(child: Image.file(File(widget.imagePath))),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Text(
-              _extractedText,
-              style: const TextStyle(fontSize: 18),
-              textAlign: TextAlign.center,
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: SingleChildScrollView(
+                child: Text(
+                  _extractedText,
+                  style: const TextStyle(fontSize: 18),
+                  textAlign: TextAlign.center,
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 20),
           const Text(
-            "Say 'retry' to capture again or 'exit' to close.",
+            "Say 'capture' to go back to camera again or 'exit' to close.",
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 30),
