@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -40,13 +41,27 @@ class _SignUpScreenState extends State<SignUpScreen>
   final List<TextEditingController> _controllers = [];
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _initializeSpeech();
-    _initializeControllers();
-    _promptUser();
+void initState() {
+  super.initState();
+  WidgetsBinding.instance.addObserver(this);
+ _checkSignUpState(); // Add this line
+  _initializeSpeech();
+  _initializeControllers();
+  _promptUser();
+}
+
+//Add this new method below your existing methods
+void _checkSignUpState() async {
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  bool isSignedUp = prefs.getBool('isSignedUp') ?? false;
+
+  if (isSignedUp) {
+    // Navigate directly to the CameraScreen
+    Navigator.pushReplacement(
+        context, MaterialPageRoute(builder: (_) => const CameraScreen()));
   }
+}
+
 
   void _initializeControllers() {
     _controllers.addAll(_formFields
@@ -167,9 +182,16 @@ class _SignUpScreenState extends State<SignUpScreen>
 
         print("Captured Words: ${_formFields[_currentFieldIndex]['value']}");
 
-        Future.delayed(const Duration(seconds: 10), () {
+        Future.delayed(const Duration(seconds: 10), () async{
           if (_formFields[_currentFieldIndex]['value']!.isNotEmpty) {
             pauseTimer?.cancel();
+            String fieldValue =
+              _formFields[_currentFieldIndex]['value']!.trim();
+                await _confirmAndStartListening(
+                _formFields[_currentFieldIndex]['label']!,
+                fieldValue,
+          );
+          
             if (_currentFieldIndex < _formFields.length - 1) {
               print("Switching to next field...");
               Future.delayed(const Duration(milliseconds: 500), _goToNextField);
@@ -194,6 +216,84 @@ class _SignUpScreenState extends State<SignUpScreen>
       }
     };
   }
+
+  Future<void> _confirmAndStartListening(String fieldLabel, String fieldValue) async {
+  if (_isListening || _isProcessing) return;
+
+  setState(() => _isListening = true);
+
+  isSpeechActive = true;
+  updatedWords = "";
+
+  _readMessage(
+      "Is $fieldValue your $fieldLabel? Say yes to continue or no to re-enter.");
+  await flutterTts.awaitSpeakCompletion(true);
+
+  bool confirmationReceived = false;
+  Timer? pauseTimer;
+
+  _speech.listen(
+    onResult: (result) async {
+      if (result.recognizedWords.isNotEmpty) {
+        confirmationReceived = true;
+        String confirmation = result.recognizedWords.toLowerCase().trim();
+
+        if (confirmation.contains("yes")) {
+          _stopListening();
+          pauseTimer?.cancel();
+
+          if (_currentFieldIndex == _formFields.length - 1 &&
+              (_formFields[_currentFieldIndex]['value']?.isNotEmpty ?? false)) {
+            _readMessage("All fields are filled. Signing you up now.");
+            await flutterTts.awaitSpeakCompletion(true);
+            await _signUp();
+          } else {
+            _goToNextField();
+          }
+        } else if (confirmation.contains("no")) {
+          _stopListening();
+          pauseTimer?.cancel();
+          _readMessage("Please re-enter your $fieldLabel.");
+          await flutterTts.awaitSpeakCompletion(true);
+          _startListening(fieldLabel);
+        } else if (confirmation.contains("exit") ||
+            confirmation.contains("close")) {
+          print("Closing the app...");
+          _readMessage("Closing the app...");
+          Future.delayed(const Duration(seconds: 1), () {
+            SystemNavigator.pop();
+          });
+        }
+      }
+    },
+    listenFor: const Duration(seconds: 20),
+    pauseFor: const Duration(seconds: 10),
+  );
+
+  pauseTimer = Timer(const Duration(seconds: 10), () {
+    if (!confirmationReceived && _isListening) {
+      print("PauseFor timeout reached. Waiting for response...");
+    }
+  });
+
+  _speech.statusListener = (status) {
+    print("Speech recognition status: $status");
+
+    if (status == "notListening") {
+      _stopListening();
+      isSpeechActive = false;
+      _isListening = false;
+
+      if (!confirmationReceived) {
+        _readMessage("I didn't hear anything. Please try again.");
+        Future.delayed(const Duration(seconds: 2), () {
+          _confirmAndStartListening(fieldLabel, fieldValue);
+        });
+      }
+    }
+  };
+}
+
 
   void _stopListening() {
     _speech.stop();
@@ -238,13 +338,22 @@ class _SignUpScreenState extends State<SignUpScreen>
         'phone': _controllers[2].text,
       };
       await firestore.collection('users').doc(userId).set(userData);
+      
+
       if (userId.isNotEmpty) {
-        print(userId.toString());
-        await flutterTts.speak("Sign Up successful");
-        await flutterTts.awaitSpeakCompletion(true);
-        Navigator.pushReplacement(
-            context, MaterialPageRoute(builder: (_) => const CameraScreen()));
-      }
+      print(userId.toString());
+      
+      // Store the sign-up state in SharedPreferences
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('isSignedUp', true);
+
+      await flutterTts.speak("Sign Up successful");
+      await flutterTts.awaitSpeakCompletion(true);
+      
+      Navigator.pushReplacement(
+          context, MaterialPageRoute(builder: (_) => const CameraScreen()));
+    }
+
     } catch (e) {
       print("Error: $e");
       await flutterTts.speak("error creating new account");

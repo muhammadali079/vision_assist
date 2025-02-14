@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:testing/new/ocr_screen.dart';
@@ -159,16 +160,27 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
-  void _logOut() {
-    _stopListening();
-    _readMessage("Logging out...");
-    Future.delayed(const Duration(seconds: 2), () {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const SignInScreen()),
-      );
-    });
+  void _logOut() async {
+  // Stop listening to speech and clear flags
+  _stopListening();
+
+  // Clear shared preferences
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  await prefs.clear();
+
+  // Speak logout message and ensure it completes before navigation
+  await _flutterTts.speak("Logging out...");
+  await _flutterTts.awaitSpeakCompletion(true); // Ensure TTS completes
+
+  // Navigate to SignInScreen
+  if (context.mounted) {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const SignInScreen()),
+    );
   }
+}
+
 
   void _readMessage(String message) async {
     await _flutterTts.speak(message);

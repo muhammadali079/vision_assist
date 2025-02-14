@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:testing/new/camera_screen.dart';
@@ -32,14 +33,26 @@ class _SignInScreenState extends State<SignInScreen>
 
   final List<TextEditingController> _controllers = [];
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _initializeSpeech();
-    _initializeControllers();
-    _promptUser();
+ @override
+void initState() {
+  super.initState();
+  WidgetsBinding.instance.addObserver(this);
+  _checkSignInState(); // Add this line
+  _initializeSpeech();
+  _initializeControllers();
+  _promptUser();
+}
+void _checkSignInState() async {
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  bool isSignedIn = prefs.getBool('isSignedIn') ?? false;
+
+  if (isSignedIn) {
+    // Navigate directly to the CameraScreen
+    Navigator.pushReplacement(
+        context, MaterialPageRoute(builder: (_) => const CameraScreen()));
   }
+}
+
 
   void _initializeControllers() {
     _controllers.addAll(_formFields
@@ -153,9 +166,15 @@ class _SignInScreenState extends State<SignInScreen>
 
         print("Captured Words: ${_formFields[_currentFieldIndex]['value']}");
 
-        Future.delayed(const Duration(seconds: 10), () {
+        Future.delayed(const Duration(seconds: 10), ()async {
           if (_formFields[_currentFieldIndex]['value']!.isNotEmpty) {
             pauseTimer?.cancel(); 
+            String fieldValue =
+              _formFields[_currentFieldIndex]['value']!.trim();
+                await _confirmAndStartListening(
+                _formFields[_currentFieldIndex]['label']!,
+                fieldValue,
+          );
             if (_currentFieldIndex < _formFields.length - 1) {
               print("Switching to next field...");
               Future.delayed(const Duration(milliseconds: 500), _goToNextField);
@@ -181,6 +200,82 @@ class _SignInScreenState extends State<SignInScreen>
       }
     };
   }
+  Future<void> _confirmAndStartListening(String fieldLabel, String fieldValue) async {
+  if (_isListening ) return;
+
+  setState(() => _isListening = true);
+
+  isSpeechActive = true;
+  updatedWords = "";
+
+  _readMessage(
+      "Is $fieldValue your $fieldLabel? Say yes to continue or no to re-enter.");
+  await flutterTts.awaitSpeakCompletion(true);
+
+  bool confirmationReceived = false;
+  Timer? pauseTimer;
+
+  _speech.listen(
+    onResult: (result) async {
+      if (result.recognizedWords.isNotEmpty) {
+        confirmationReceived = true;
+        String confirmation = result.recognizedWords.toLowerCase().trim();
+
+        if (confirmation.contains("yes")) {
+          _stopListening();
+          pauseTimer?.cancel();
+
+          if (_currentFieldIndex == _formFields.length - 1 &&
+              (_formFields[_currentFieldIndex]['value']?.isNotEmpty ?? false)) {
+            _readMessage("All fields are filled. Signing in now.");
+            await flutterTts.awaitSpeakCompletion(true);
+            await _signIn();
+          } else {
+            _goToNextField();
+          }
+        } else if (confirmation.contains("no")) {
+          _stopListening();
+          pauseTimer?.cancel();
+          _readMessage("Please re-enter your $fieldLabel.");
+          await flutterTts.awaitSpeakCompletion(true);
+          _startListening(fieldLabel);
+        } else if (confirmation.contains("exit") ||
+            confirmation.contains("close")) {
+          print("Closing the app...");
+          _readMessage("Closing the app...");
+          Future.delayed(const Duration(seconds: 1), () {
+            SystemNavigator.pop();
+          });
+        }
+      }
+    },
+    listenFor: const Duration(seconds: 20),
+    pauseFor: const Duration(seconds: 10),
+  );
+
+  pauseTimer = Timer(const Duration(seconds: 10), () {
+    if (!confirmationReceived && _isListening) {
+      print("PauseFor timeout reached. Waiting for response...");
+    }
+  });
+
+  _speech.statusListener = (status) {
+    print("Speech recognition status: $status");
+
+    if (status == "notListening") {
+      _stopListening();
+      isSpeechActive = false;
+      _isListening = false;
+
+      if (!confirmationReceived) {
+        _readMessage("I didn't hear anything. Please try again.");
+        Future.delayed(const Duration(seconds: 2), () {
+          _confirmAndStartListening(fieldLabel, fieldValue);
+        });
+      }
+    }
+  };
+}
 
   void _goToNextField() async {
     _stopListening();
@@ -216,9 +311,12 @@ class _SignInScreenState extends State<SignInScreen>
       );
       _readMessage("Sign in successful. Welcome back!");
       await flutterTts.awaitSpeakCompletion(true);
-      Navigator.pushReplacement(
-          context, MaterialPageRoute(builder: (_) => const CameraScreen()));
-    } catch (e) {
+     SharedPreferences prefs = await SharedPreferences.getInstance();
+await prefs.setBool('isSignedIn', true); // Save sign-in state
+
+Navigator.pushReplacement(
+    context, MaterialPageRoute(builder: (_) => const CameraScreen()));
+} catch (e) {
       await flutterTts.speak("Error signing in. Please try again.");
       await flutterTts.awaitSpeakCompletion(true);
       Future.delayed(const Duration(seconds: 2), _resetForm);

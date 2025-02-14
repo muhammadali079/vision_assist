@@ -5,6 +5,7 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:audioplayers/audioplayers.dart';
 import 'package:testing/new/camera_screen.dart';
@@ -140,17 +141,23 @@ class _OcrScreenState extends State<OcrScreen> {
     }
   }
 
-  void _logOut() {
-    _isOCRScreen = false;
-    _speech.stop();
-    _speakWithFlutterTTS("Logging Out...");
-    Future.delayed(const Duration(seconds: 2), () {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const SignInScreen()),
-      );
-    });
-  }
+  void _logOut() async {
+  _isOCRScreen = false;
+  _speech.stop();
+
+  // Clear the stored preferences
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  await prefs.clear();
+
+  // Speak and navigate to SignInScreen
+  _speakWithFlutterTTS("Logging out...");
+  Future.delayed(const Duration(seconds: 2), () {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const SignInScreen()),
+    );
+  });
+}
 
   void _stopListening() {
     _speech.stop();

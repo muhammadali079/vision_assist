@@ -67,28 +67,58 @@ class AuthWrapper extends StatefulWidget {
 }
 
 class _AuthWrapperState extends State<AuthWrapper> {
+  bool isSignedUp = false;
   bool isLoggedIn = false;
-  bool isSignIn = false;
 
   @override
   void initState() {
     super.initState();
-    _checkLoginStatus();
+    _checkAuthStatus();
   }
 
-  Future<void> _checkLoginStatus() async {
+  Future<void> _checkAuthStatus() async {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
-      //isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
-      isLoggedIn = false;
+      isSignedUp = prefs.getBool('isSignedUp') ?? false;
+      isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
     });
   }
 
+  // @override
+  // Widget build(BuildContext context) {
+  //   if (isLoggedIn) {
+  //     return const CameraScreen();
+  //   } else if (isSignedUp) {
+  //     return const SignInScreen();
+  //   } else {
+  //     return const SignUpScreen();
+  //   }
+  // }
+  
+
   @override
   Widget build(BuildContext context) {
-//  return isLoggedIn
-//     ? const CameraScreen()
-//       : SignInScreen();
-    return  CameraScreen();
+     // Testing logic: Uncomment one of the following to test individual screens.
+    
+    // To test the SignUpScreen only:
+    // return const SignUpScreen();
+    
+    // To test the SignInScreen only:
+    // return const SignInScreen();
+    
+    // To test the CameraScreen only:
+    // return const CameraScreen();
+
+    // Default logic: This handles the original flow.
+    if (isLoggedIn) {
+      return const CameraScreen();
+    } else if (isSignedUp) {
+      return const SignInScreen();
+    } else {
+      return const SignUpScreen();
+    }
   }
+
+
+
 }
