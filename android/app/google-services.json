@@ -7,9 +7,9 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:129507634323:android:ee96c7ddc0034126f87166",
+        "mobilesdk_app_id": "1:129507634323:android:883f6566f96e6d19f87166",
         "android_client_info": {
-          "package_name": "com.example.testing"
+          "package_name": "com.eyecare.visionassist"
         }
       },
       "oauth_client": [],
