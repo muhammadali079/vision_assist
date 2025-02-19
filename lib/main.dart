@@ -94,31 +94,27 @@ class _AuthWrapperState extends State<AuthWrapper> {
   //     return const SignUpScreen();
   //   }
   // }
-  
 
   @override
   Widget build(BuildContext context) {
-     // Testing logic: Uncomment one of the following to test individual screens.
-    
+    // Testing logic: Uncomment one of the following to test individual screens.
+
     // To test the SignUpScreen only:
     // return const SignUpScreen();
-    
+
     // To test the SignInScreen only:
     // return const SignInScreen();
-    
+
     // To test the CameraScreen only:
-    // return const CameraScreen();
+    return const CameraScreen();
 
     // Default logic: This handles the original flow.
-    if (isLoggedIn) {
-      return const CameraScreen();
-    } else if (isSignedUp) {
-      return const SignInScreen();
-    } else {
-      return const SignUpScreen();
-    }
+    // if (isLoggedIn) {
+    // return const CameraScreen();
+    // } else if (isSignedUp) {
+    //   return const SignInScreen();
+    // } else {
+    //   return const SignUpScreen();
+    // }
   }
-
-
-
 }

@@ -161,26 +161,25 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   void _logOut() async {
-  // Stop listening to speech and clear flags
-  _stopListening();
+    // Stop listening to speech and clear flags
+    _stopListening();
 
-  // Clear shared preferences
-  SharedPreferences prefs = await SharedPreferences.getInstance();
-  await prefs.clear();
+    // Clear shared preferences
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
 
-  // Speak logout message and ensure it completes before navigation
-  await _flutterTts.speak("Logging out...");
-  await _flutterTts.awaitSpeakCompletion(true); // Ensure TTS completes
+    // Speak logout message and ensure it completes before navigation
+    await _flutterTts.speak("Logging out...");
+    await _flutterTts.awaitSpeakCompletion(true); // Ensure TTS completes
 
-  // Navigate to SignInScreen
-  if (context.mounted) {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const SignInScreen()),
-    );
+    // Navigate to SignInScreen
+    if (context.mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const SignInScreen()),
+      );
+    }
   }
-}
-
 
   void _readMessage(String message) async {
     await _flutterTts.speak(message);
@@ -209,21 +208,24 @@ class _CameraScreenState extends State<CameraScreen> {
   Widget buildCameraPreview() {
     if (!_controller.value.isInitialized) return Container();
 
-    double previewAspectRatio = _controller.value.previewSize!.width /
-        _controller.value.previewSize!.height;
-    double screenAspectRatio =
-        MediaQuery.of(context).size.width / MediaQuery.of(context).size.height;
+    // Get the screen size
+    final size = MediaQuery.of(context).size;
 
-    double scale = previewAspectRatio / screenAspectRatio;
+    // Calculate preview sizes and ratios
+    var scale = size.aspectRatio * _controller.value.aspectRatio;
 
-    return Transform(
-      alignment: Alignment.center,
-      transform: Matrix4.identity()
-        ..rotateZ(getCorrectedRotation() * (math.pi / 180)),
-      child: Transform.scale(
-        scale: scale > 1 ? scale : 1 / scale,
-        child: AspectRatio(
-          aspectRatio: previewAspectRatio,
+    // Check if we need to scale width or height
+    if (scale < 1) scale = 1 / scale;
+
+    // Handle platform-specific rotation
+    final isIOS = Theme.of(context).platform == TargetPlatform.iOS;
+    final rotationDegrees = isIOS ? 0.0 : getCorrectedRotation();
+
+    return Transform.scale(
+      scale: scale,
+      child: Center(
+        child: Transform.rotate(
+          angle: rotationDegrees * (math.pi / 180),
           child: CameraPreview(_controller),
         ),
       ),
@@ -233,7 +235,12 @@ class _CameraScreenState extends State<CameraScreen> {
   double getCorrectedRotation() {
     if (!_controller.value.isInitialized) return 0;
 
-    final CameraDescription description = _controller.description;
+    final description = _controller.description;
+    final isIOS = Theme.of(context).platform == TargetPlatform.iOS;
+
+    // iOS handles rotation differently, so we return 0
+    if (isIOS) return 0;
+
     if (description.lensDirection == CameraLensDirection.front) {
       return (360 - description.sensorOrientation) % 360;
     } else {
@@ -245,26 +252,30 @@ class _CameraScreenState extends State<CameraScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: _cameraInitialized
-          ? Stack(
-              children: [
-                Center(child: buildCameraPreview()),
-                Positioned(
-                  bottom: 50,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: Text(
-                      "Say 'Capture' to take a picture, 'Log out' to sign out of your account, or 'Exit' to close the app.",
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        backgroundColor: Colors.black54,
+          ? SafeArea(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  buildCameraPreview(),
+                  Positioned(
+                    bottom: 50,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: Text(
+                        "Say 'Capture' to take a picture, 'Log out' to sign out of your account, or 'Exit' to close the app.",
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          backgroundColor: Colors.black54,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             )
           : const Center(child: CircularProgressIndicator()),
     );
