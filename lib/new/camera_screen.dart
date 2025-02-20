@@ -16,7 +16,8 @@ class CameraScreen extends StatefulWidget {
   _CameraScreenState createState() => _CameraScreenState();
 }
 
-class _CameraScreenState extends State<CameraScreen> {
+class _CameraScreenState extends State<CameraScreen>
+    with SingleTickerProviderStateMixin {
   late CameraController _controller;
   late List<CameraDescription> _cameras;
   final stt.SpeechToText _speech = stt.SpeechToText();
@@ -24,14 +25,22 @@ class _CameraScreenState extends State<CameraScreen> {
   bool _isListening = false;
   bool _cameraInitialized = false;
   bool isCameraScreen = true;
+  late AnimationController _glowController;
+  late Animation<double> _glowAnimation;
+  bool _isTouching = false;
 
   @override
   void initState() {
     super.initState();
+    _glowController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+    _glowAnimation = Tween<double>(begin: 0, end: 1).animate(_glowController);
     _initializeCamera();
     //isCameraScreen = true;
     _flutterTts.speak(
-        "Say Capture to take a picture, Log out to sign out of your account, or Exit to close the app.");
+        "Touch and hold anywhere on screen for half a second to capture image. Say Log out to sign out of your account, or Exit to close the app.");
     _flutterTts.awaitSpeakCompletion(true);
   }
 
@@ -188,6 +197,7 @@ class _CameraScreenState extends State<CameraScreen> {
 
   @override
   void dispose() {
+    _glowController.dispose();
     isCameraScreen = false;
     _speech.stop();
     _speech.statusListener = null;
@@ -248,6 +258,26 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
+  void _handleTapDown(TapDownDetails details) {
+    setState(() => _isTouching = true);
+    _glowController.forward();
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (_isTouching) {
+        _takePicture();
+      }
+    });
+  }
+
+  void _handleTapUp(TapUpDetails details) {
+    setState(() => _isTouching = false);
+    _glowController.reverse();
+  }
+
+  void _handleTapCancel() {
+    setState(() => _isTouching = false);
+    _glowController.reverse();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -256,14 +286,33 @@ class _CameraScreenState extends State<CameraScreen> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  buildCameraPreview(),
+                  GestureDetector(
+                    onTapDown: _handleTapDown,
+                    onTapUp: _handleTapUp,
+                    onTapCancel: _handleTapCancel,
+                    child: AnimatedBuilder(
+                      animation: _glowAnimation,
+                      builder: (context, child) {
+                        return Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: Colors.green
+                                  .withOpacity(_glowAnimation.value * 0.5),
+                              width: 10 * _glowAnimation.value,
+                            ),
+                          ),
+                          child: buildCameraPreview(),
+                        );
+                      },
+                    ),
+                  ),
                   Positioned(
                     bottom: 50,
                     left: 0,
                     right: 0,
                     child: Center(
                       child: Text(
-                        "Say 'Capture' to take a picture, 'Log out' to sign out of your account, or 'Exit' to close the app.",
+                        "Touch and hold anywhere on screen for half a second to capture image.\nSay 'Log out' to sign out of your account, or 'Exit' to close the app.",
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           color: Colors.white,
