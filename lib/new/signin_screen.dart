@@ -25,6 +25,7 @@ class _SignInScreenState extends State<SignInScreen>
   bool isSpeechActive = false;
   int _currentFieldIndex = 0;
   String updatedWords = "";
+  bool _isManualInput = false;
 
   final List<Map<String, String>> _formFields = [
     {'label': 'Email Address', 'value': ''},
@@ -33,26 +34,26 @@ class _SignInScreenState extends State<SignInScreen>
 
   final List<TextEditingController> _controllers = [];
 
- @override
-void initState() {
-  super.initState();
-  WidgetsBinding.instance.addObserver(this);
-  _checkSignInState(); // Add this line
-  _initializeSpeech();
-  _initializeControllers();
-  _promptUser();
-}
-void _checkSignInState() async {
-  SharedPreferences prefs = await SharedPreferences.getInstance();
-  bool isSignedIn = prefs.getBool('isSignedIn') ?? false;
-
-  if (isSignedIn) {
-    // Navigate directly to the CameraScreen
-    Navigator.pushReplacement(
-        context, MaterialPageRoute(builder: (_) => const CameraScreen()));
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _checkSignInState(); // Add this line
+    _initializeSpeech();
+    _initializeControllers();
+    _promptUser();
   }
-}
 
+  void _checkSignInState() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    bool isSignedIn = prefs.getBool('isSignedIn') ?? false;
+
+    if (isSignedIn) {
+      // Navigate directly to the CameraScreen
+      Navigator.pushReplacement(
+          context, MaterialPageRoute(builder: (_) => const CameraScreen()));
+    }
+  }
 
   void _initializeControllers() {
     _controllers.addAll(_formFields
@@ -98,13 +99,13 @@ void _checkSignInState() async {
     _readMessage("Please say your $fieldLabel.");
     await flutterTts.awaitSpeakCompletion(true);
 
-    bool hasSpoken = false; 
-    Timer? pauseTimer; 
+    bool hasSpoken = false;
+    Timer? pauseTimer;
 
     _speech.listen(
       onResult: (result) {
         if (result.recognizedWords.isNotEmpty) {
-          hasSpoken = true; 
+          hasSpoken = true;
           updatedWords = result.recognizedWords.toLowerCase().trim();
           updatedWords = updatedWords.replaceAll(RegExp(r'\s*@\s*'), '@');
           updatedWords = updatedWords.replaceAll(
@@ -128,7 +129,7 @@ void _checkSignInState() async {
             print("Closing the app...");
             _readMessage("Closing the app...");
             Future.delayed(const Duration(seconds: 1), () {
-              SystemNavigator.pop(); 
+              SystemNavigator.pop();
             });
             return;
           }
@@ -166,15 +167,15 @@ void _checkSignInState() async {
 
         print("Captured Words: ${_formFields[_currentFieldIndex]['value']}");
 
-        Future.delayed(const Duration(seconds: 10), ()async {
+        Future.delayed(const Duration(seconds: 10), () async {
           if (_formFields[_currentFieldIndex]['value']!.isNotEmpty) {
-            pauseTimer?.cancel(); 
+            pauseTimer?.cancel();
             String fieldValue =
-              _formFields[_currentFieldIndex]['value']!.trim();
-                await _confirmAndStartListening(
-                _formFields[_currentFieldIndex]['label']!,
-                fieldValue,
-          );
+                _formFields[_currentFieldIndex]['value']!.trim();
+            await _confirmAndStartListening(
+              _formFields[_currentFieldIndex]['label']!,
+              fieldValue,
+            );
             if (_currentFieldIndex < _formFields.length - 1) {
               print("Switching to next field...");
               Future.delayed(const Duration(milliseconds: 500), _goToNextField);
@@ -187,7 +188,6 @@ void _checkSignInState() async {
             print("No words captured, retrying...");
             _readMessage("I didn't hear anything. Please say it again.");
             Future.delayed(const Duration(seconds: 2), () {
-          
               if (_formFields[_currentFieldIndex]['value']!.isEmpty) {
                 _startListening(_formFields[_currentFieldIndex]['label']!);
               } else {
@@ -200,82 +200,85 @@ void _checkSignInState() async {
       }
     };
   }
-  Future<void> _confirmAndStartListening(String fieldLabel, String fieldValue) async {
-  if (_isListening ) return;
 
-  setState(() => _isListening = true);
+  Future<void> _confirmAndStartListening(
+      String fieldLabel, String fieldValue) async {
+    if (_isListening) return;
 
-  isSpeechActive = true;
-  updatedWords = "";
+    setState(() => _isListening = true);
 
-  _readMessage(
-      "Is $fieldValue your $fieldLabel? Say yes to continue or no to re-enter.");
-  await flutterTts.awaitSpeakCompletion(true);
+    isSpeechActive = true;
+    updatedWords = "";
 
-  bool confirmationReceived = false;
-  Timer? pauseTimer;
+    _readMessage(
+        "Is $fieldValue your $fieldLabel? Say yes to continue or no to re-enter.");
+    await flutterTts.awaitSpeakCompletion(true);
 
-  _speech.listen(
-    onResult: (result) async {
-      if (result.recognizedWords.isNotEmpty) {
-        confirmationReceived = true;
-        String confirmation = result.recognizedWords.toLowerCase().trim();
+    bool confirmationReceived = false;
+    Timer? pauseTimer;
 
-        if (confirmation.contains("yes")) {
-          _stopListening();
-          pauseTimer?.cancel();
+    _speech.listen(
+      onResult: (result) async {
+        if (result.recognizedWords.isNotEmpty) {
+          confirmationReceived = true;
+          String confirmation = result.recognizedWords.toLowerCase().trim();
 
-          if (_currentFieldIndex == _formFields.length - 1 &&
-              (_formFields[_currentFieldIndex]['value']?.isNotEmpty ?? false)) {
-            _readMessage("All fields are filled. Signing in now.");
+          if (confirmation.contains("yes")) {
+            _stopListening();
+            pauseTimer?.cancel();
+
+            if (_currentFieldIndex == _formFields.length - 1 &&
+                (_formFields[_currentFieldIndex]['value']?.isNotEmpty ??
+                    false)) {
+              _readMessage("All fields are filled. Signing in now.");
+              await flutterTts.awaitSpeakCompletion(true);
+              await _signIn();
+            } else {
+              _goToNextField();
+            }
+          } else if (confirmation.contains("no")) {
+            _stopListening();
+            pauseTimer?.cancel();
+            _readMessage("Please re-enter your $fieldLabel.");
             await flutterTts.awaitSpeakCompletion(true);
-            await _signIn();
-          } else {
-            _goToNextField();
+            _startListening(fieldLabel);
+          } else if (confirmation.contains("exit") ||
+              confirmation.contains("close")) {
+            print("Closing the app...");
+            _readMessage("Closing the app...");
+            Future.delayed(const Duration(seconds: 1), () {
+              SystemNavigator.pop();
+            });
           }
-        } else if (confirmation.contains("no")) {
-          _stopListening();
-          pauseTimer?.cancel();
-          _readMessage("Please re-enter your $fieldLabel.");
-          await flutterTts.awaitSpeakCompletion(true);
-          _startListening(fieldLabel);
-        } else if (confirmation.contains("exit") ||
-            confirmation.contains("close")) {
-          print("Closing the app...");
-          _readMessage("Closing the app...");
-          Future.delayed(const Duration(seconds: 1), () {
-            SystemNavigator.pop();
+        }
+      },
+      listenFor: const Duration(seconds: 20),
+      pauseFor: const Duration(seconds: 10),
+    );
+
+    pauseTimer = Timer(const Duration(seconds: 10), () {
+      if (!confirmationReceived && _isListening) {
+        print("PauseFor timeout reached. Waiting for response...");
+      }
+    });
+
+    _speech.statusListener = (status) {
+      print("Speech recognition status: $status");
+
+      if (status == "notListening") {
+        _stopListening();
+        isSpeechActive = false;
+        _isListening = false;
+
+        if (!confirmationReceived) {
+          _readMessage("I didn't hear anything. Please try again.");
+          Future.delayed(const Duration(seconds: 2), () {
+            _confirmAndStartListening(fieldLabel, fieldValue);
           });
         }
       }
-    },
-    listenFor: const Duration(seconds: 20),
-    pauseFor: const Duration(seconds: 10),
-  );
-
-  pauseTimer = Timer(const Duration(seconds: 10), () {
-    if (!confirmationReceived && _isListening) {
-      print("PauseFor timeout reached. Waiting for response...");
-    }
-  });
-
-  _speech.statusListener = (status) {
-    print("Speech recognition status: $status");
-
-    if (status == "notListening") {
-      _stopListening();
-      isSpeechActive = false;
-      _isListening = false;
-
-      if (!confirmationReceived) {
-        _readMessage("I didn't hear anything. Please try again.");
-        Future.delayed(const Duration(seconds: 2), () {
-          _confirmAndStartListening(fieldLabel, fieldValue);
-        });
-      }
-    }
-  };
-}
+    };
+  }
 
   void _goToNextField() async {
     _stopListening();
@@ -309,16 +312,27 @@ void _checkSignInState() async {
         email: _formFields[0]['value']!,
         password: _formFields[1]['value']!,
       );
-      _readMessage("Sign in successful. Welcome back!");
-      await flutterTts.awaitSpeakCompletion(true);
-     SharedPreferences prefs = await SharedPreferences.getInstance();
-await prefs.setBool('isSignedIn', true); // Save sign-in state
 
-Navigator.pushReplacement(
-    context, MaterialPageRoute(builder: (_) => const CameraScreen()));
-} catch (e) {
-      await flutterTts.speak("Error signing in. Please try again.");
-      await flutterTts.awaitSpeakCompletion(true);
+      if (!_isManualInput) {
+        _readMessage("Sign in successful. Welcome back!");
+        await flutterTts.awaitSpeakCompletion(true);
+      }
+
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('isSignedIn', true);
+
+      if (context.mounted) {
+        Navigator.pushReplacement(
+            context, MaterialPageRoute(builder: (_) => const CameraScreen()));
+      }
+    } catch (e) {
+      if (!_isManualInput) {
+        await flutterTts.speak("Error signing in. Please try again.");
+        await flutterTts.awaitSpeakCompletion(true);
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sign in failed. Please try again.')),
+      );
       Future.delayed(const Duration(seconds: 2), _resetForm);
     }
   }
@@ -337,10 +351,20 @@ Navigator.pushReplacement(
     Future.delayed(const Duration(seconds: 2), _promptUser);
   }
 
+  void _handleManualSignIn() {
+    if (_formFields[0]['value']!.isEmpty || _formFields[1]['value']!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please fill in all fields')),
+      );
+      return;
+    }
+    _signIn();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Sign In')),
+      appBar: AppBar(title: const Text('Sign In')),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -351,16 +375,47 @@ Navigator.pushReplacement(
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            TextFormField(
-              controller: _controllers[_currentFieldIndex],
-              decoration: InputDecoration(
-                labelText: _formFields[_currentFieldIndex]['label'],
-                hintText:
-                    'Enter your ${_formFields[_currentFieldIndex]['label']}',
-              ),
-              enabled: false,
+            ListView.builder(
+              shrinkWrap: true,
+              itemCount: _formFields.length,
+              itemBuilder: (context, index) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 16.0),
+                  child: TextFormField(
+                    controller: _controllers[index],
+                    obscureText: _formFields[index]['label'] == 'Password',
+                    decoration: InputDecoration(
+                      labelText: _formFields[index]['label'],
+                      hintText: 'Enter your ${_formFields[index]['label']}',
+                    ),
+                    onChanged: (value) {
+                      _isManualInput = true;
+                      setState(() {
+                        _formFields[index]['value'] = value;
+                      });
+                    },
+                  ),
+                );
+              },
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _handleManualSignIn,
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(200, 50),
+              ),
+              child: const Text('Sign In', style: TextStyle(fontSize: 18)),
+            ),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const SignUpScreen()),
+                );
+              },
+              child: const Text('Don\'t have an account? Sign Up'),
+            ),
           ],
         ),
       ),
