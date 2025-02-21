@@ -37,11 +37,9 @@ class _CameraScreenState extends State<CameraScreen>
       duration: const Duration(milliseconds: 500),
     );
     _glowAnimation = Tween<double>(begin: 0, end: 1).animate(_glowController);
-    _initializeCamera();
+
     //isCameraScreen = true;
-    _flutterTts.speak(
-        "Touch and hold anywhere on screen for half a second to capture image. Say Log out to sign out of your account, or Exit to close the app.");
-    _flutterTts.awaitSpeakCompletion(true);
+    _initializeCamera();
   }
 
   Future<void> _initializeCamera() async {
@@ -57,6 +55,10 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   Future<void> _initializeSpeech() async {
+    var result = await _flutterTts.speak(
+        "Say Log out to sign out of your account, or Exit to close the app.");
+    var isTTSComplete = await _flutterTts.awaitSpeakCompletion(true);
+
     bool available = await _speech.initialize(
       onStatus: (status) {
         print("Speech status: $status");
@@ -65,11 +67,14 @@ class _CameraScreenState extends State<CameraScreen>
         print("Speech error: $error");
       },
     );
-    if (available) {
+    if (available && result == 1) {
+      print("Speech recognition is available.");
       _promptUser();
     } else {
       _readMessage("Speech recognition is not available.");
     }
+
+    //Future isTTS = _flutterTts.awaitSpeakCompletion(true);
   }
 
   void _promptUser() async {
@@ -90,7 +95,7 @@ class _CameraScreenState extends State<CameraScreen>
     if (_isListening) return;
     // await _flutterTts
     //     .speak("Say capture to take a picture or exit to close the app.");
-    // await _flutterTts.awaitSpeakCompletion(true);
+    //await _flutterTts.awaitSpeakCompletion(true);
 
     setState(() => _isListening = true);
     print("Listening for commands...");
