@@ -52,6 +52,11 @@
 	<key>NSSpeechSynthesisUsageDescription</key>
 	<string>We need speech synthesis to provide voice feedback.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>We need camera access to capture images for better assistance.</string>
+	<string>We need camera access to capture images for better assistance.</string>	
+	<key>NSAppTransportSecurity</key>
+	<dict>
+			<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
 </dict>
 </plist>
