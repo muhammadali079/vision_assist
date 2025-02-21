@@ -44,7 +44,7 @@ class _OcrScreenState extends State<OcrScreen> {
           TextRecognizer(script: TextRecognitionScript.latin);
       final inputImage = InputImage.fromFilePath(widget.imagePath);
       final recognizedText = await textRecognizer.processImage(inputImage);
-      textRecognizer.close();
+      await textRecognizer.close();
 
       String extracted = recognizedText.text.isNotEmpty
           ? recognizedText.text
@@ -76,7 +76,9 @@ class _OcrScreenState extends State<OcrScreen> {
         final file = File(filePath);
         await file.writeAsBytes(response.bodyBytes);
 
-        await _audioPlayer.setSourceUrl(filePath);
+        final uriPath = Uri.file(filePath).toString();
+        await _audioPlayer.stop();
+        await _audioPlayer.setSourceUrl(uriPath);
         await _audioPlayer.resume();
         await _audioPlayer.onPlayerComplete.first;
         Future.delayed(const Duration(seconds: 2), _promptTTSUser);
@@ -117,7 +119,9 @@ class _OcrScreenState extends State<OcrScreen> {
             } else if (command.contains("exit") || command.contains("close")) {
               _exitApp();
               return;
-            } else if (command.contains("log out") || command.contains("logout") || command.contains("signout") ||
+            } else if (command.contains("log out") ||
+                command.contains("logout") ||
+                command.contains("signout") ||
                 command.contains("sign out")) {
               _logOut();
               return;
@@ -142,22 +146,22 @@ class _OcrScreenState extends State<OcrScreen> {
   }
 
   void _logOut() async {
-  _isOCRScreen = false;
-  _speech.stop();
+    _isOCRScreen = false;
+    _speech.stop();
 
-  // Clear the stored preferences
-  SharedPreferences prefs = await SharedPreferences.getInstance();
-  await prefs.clear();
+    // Clear the stored preferences
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.clear();
 
-  // Speak and navigate to SignInScreen
-  _speakWithFlutterTTS("Logging out...");
-  Future.delayed(const Duration(seconds: 2), () {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const SignInScreen()),
-    );
-  });
-}
+    // Speak and navigate to SignInScreen
+    _speakWithFlutterTTS("Logging out...");
+    Future.delayed(const Duration(seconds: 2), () {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const SignInScreen()),
+      );
+    });
+  }
 
   void _stopListening() {
     _speech.stop();
@@ -188,6 +192,7 @@ class _OcrScreenState extends State<OcrScreen> {
   @override
   void dispose() {
     _speech.stop();
+    _audioPlayer.stop();
     _audioPlayer.dispose();
     _isOCRScreen = false;
     super.dispose();

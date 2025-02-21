@@ -365,58 +365,65 @@ class _SignInScreenState extends State<SignInScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Sign In')),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              "Current Field: ${_formFields[_currentFieldIndex]['label']}",
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            ListView.builder(
-              shrinkWrap: true,
-              itemCount: _formFields.length,
-              itemBuilder: (context, index) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 16.0),
-                  child: TextFormField(
-                    controller: _controllers[index],
-                    obscureText: _formFields[index]['label'] == 'Password',
-                    decoration: InputDecoration(
-                      labelText: _formFields[index]['label'],
-                      hintText: 'Enter your ${_formFields[index]['label']}',
-                    ),
-                    onChanged: (value) {
-                      _isManualInput = true;
-                      setState(() {
-                        _formFields[index]['value'] = value;
-                      });
-                    },
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                SizedBox(height: MediaQuery.of(context).size.height * 0.1),
+                Text(
+                  "Current Field: ${_formFields[_currentFieldIndex]['label']}",
+                  style: const TextStyle(
+                      fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
+                ListView.builder(
+                  physics: const NeverScrollableScrollPhysics(),
+                  shrinkWrap: true,
+                  itemCount: _formFields.length,
+                  itemBuilder: (context, index) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 16.0),
+                      child: TextFormField(
+                        controller: _controllers[index],
+                        obscureText: _formFields[index]['label'] == 'Password',
+                        decoration: InputDecoration(
+                          labelText: _formFields[index]['label'],
+                          hintText: 'Enter your ${_formFields[index]['label']}',
+                        ),
+                        onChanged: (value) {
+                          _isManualInput = true;
+                          setState(() {
+                            _formFields[index]['value'] = value;
+                          });
+                        },
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: _handleManualSignIn,
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(200, 50),
                   ),
-                );
-              },
+                  child: const Text('Sign In', style: TextStyle(fontSize: 18)),
+                ),
+                const SizedBox(height: 16),
+                TextButton(
+                  onPressed: () {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SignUpScreen()),
+                    );
+                  },
+                  child: const Text('Don\'t have an account? Sign Up'),
+                ),
+                SizedBox(height: MediaQuery.of(context).viewInsets.bottom),
+              ],
             ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _handleManualSignIn,
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size(200, 50),
-              ),
-              child: const Text('Sign In', style: TextStyle(fontSize: 18)),
-            ),
-            const SizedBox(height: 16),
-            TextButton(
-              onPressed: () {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (_) => const SignUpScreen()),
-                );
-              },
-              child: const Text('Don\'t have an account? Sign Up'),
-            ),
-          ],
+          ),
         ),
       ),
     );
